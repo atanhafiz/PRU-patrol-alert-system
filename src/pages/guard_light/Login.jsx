@@ -1,9 +1,12 @@
-// src/pages/guard_light/Login.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../../lib/supabaseClient";
+import LoaderOverlay from "../../components/LoaderOverlay";
+import { useToast } from "../../components/ToastProvider";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -11,14 +14,22 @@ export default function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) {
+      showToast("Login gagal: " + error.message, "error");
+    } else {
+      showToast("Login berjaya!", "success");
       navigate("/light/home");
-    }, 1000);
+    }
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-100 to-white px-6">
+      <LoaderOverlay show={loading} />
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-md p-6">
         <h1 className="text-xl font-bold text-center text-blue-700">PRU Patrol Guard</h1>
         <p className="text-center text-gray-500 mb-6 text-sm">Light Version</p>

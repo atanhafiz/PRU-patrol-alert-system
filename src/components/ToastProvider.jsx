@@ -1,56 +1,28 @@
-// src/components/Toast.jsx
-import React, { createContext, useContext, useMemo, useState, useCallback } from "react";
+import { createContext, useContext, useState } from "react";
 
-const ToastCtx = createContext(null);
+const ToastContext = createContext();
 
 export function ToastProvider({ children }) {
-  const [items, setItems] = useState([]);
+  const [toast, setToast] = useState(null);
 
-  const remove = useCallback((id) => {
-    setItems((xs) => xs.filter((t) => t.id !== id));
-  }, []);
-
-  const show = useCallback((msg, opts = {}) => {
-    const id = Math.random().toString(36).slice(2);
-    const toast = {
-      id,
-      msg,
-      type: opts.type || "success", // success | info | warning | error
-      timeout: typeof opts.timeout === "number" ? opts.timeout : 2000,
-    };
-    setItems((xs) => [...xs, toast]);
-    setTimeout(() => remove(id), toast.timeout);
-    return id;
-  }, [remove]);
-
-  const api = useMemo(() => ({ show, remove }), [show, remove]);
+  const showToast = (msg, type = "info") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2500);
+  };
 
   return (
-    <ToastCtx.Provider value={api}>
+    <ToastContext.Provider value={{ showToast }}>
       {children}
-
-      {/* Container */}
-      <div className="fixed bottom-3 right-3 z-[9999] space-y-2 pointer-events-none">
-        {items.map((t) => (
-          <div
-            key={t.id}
-            className={`pointer-events-auto min-w-[220px] max-w-[90vw] sm:max-w-sm px-4 py-3 rounded-2xl shadow-2xl text-sm font-medium anim-pop
-              ${t.type === "success" ? "bg-emerald-600 text-white" : ""}
-              ${t.type === "info" ? "bg-slate-800 text-white" : ""}
-              ${t.type === "warning" ? "bg-amber-600 text-white" : ""}
-              ${t.type === "error" ? "bg-red-600 text-white" : ""}
-            `}
-          >
-            {t.msg}
-          </div>
-        ))}
-      </div>
-    </ToastCtx.Provider>
+      {toast && (
+        <div
+          className={`fixed bottom-5 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-white shadow-lg transition-all z-50
+          ${toast.type === "error" ? "bg-red-500" : toast.type === "success" ? "bg-green-500" : "bg-blue-500"}`}
+        >
+          {toast.msg}
+        </div>
+      )}
+    </ToastContext.Provider>
   );
 }
 
-export function useToast() {
-  const ctx = useContext(ToastCtx);
-  if (!ctx) throw new Error("useToast() must be used within <ToastProvider>");
-  return ctx;
-}
+export const useToast = () => useContext(ToastContext);
