@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import Topbar from "./components/Topbar.jsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import GuardRouter from "./pages/guard/GuardRouter.jsx";
+import LightRouter from "./pages/guard_light/LightRouter.jsx";
 
 function Layout({ children }) {
   const { pathname } = useLocation();
@@ -23,9 +24,12 @@ export default function App() {
           {/* ADMIN */}
           <Route path="/admin" element={<AdminDashboard />} />
 
-          {/* GUARD — sokong root & legacy prefix */}
+          {/* GUARD (asal) */}
           <Route path="/*" element={<GuardRouter />} />
           <Route path="/guard/*" element={<GuardRouter />} />
+
+          {/* GUARD LIGHT (baru) */}
+          <Route path="/light/*" element={<LightRouter />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
