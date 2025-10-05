@@ -1,0 +1,60 @@
+/* Import CSS Leaflet */
+@import "leaflet/dist/leaflet.css";
+
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer components {
+  .container-max { @apply max-w-6xl mx-auto px-4; }
+
+  .card { @apply bg-white border border-slate-200 rounded-2xl p-4 shadow-soft; }
+  .card-hover { @apply transition-all duration-200 hover:shadow-2xl hover:-translate-y-0.5; }
+
+  .btn { @apply inline-flex items-center justify-center font-semibold rounded-2xl px-4 py-2 select-none transition-all duration-150 active:scale-[0.98]; }
+  .btn-primary { @apply btn bg-pru-purple text-white hover:brightness-110; }
+  .btn-blue { @apply btn bg-pru-blue text-white hover:brightness-110; }
+  .btn-red { @apply btn bg-pru-red text-white hover:brightness-110; }
+  .btn-ghost { @apply btn bg-slate-100 text-slate-900 hover:bg-slate-200; }
+
+  .badge { @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold; }
+  .badge-green { @apply badge bg-emerald-100 text-emerald-700; }
+  .badge-orange { @apply badge bg-orange-100 text-orange-700; }
+  .badge-red { @apply badge bg-red-100 text-red-700; }
+
+  .list { @apply divide-y divide-slate-200; }
+  .list-item { @apply flex items-center justify-between gap-2 py-2; }
+
+  .kpi-num { @apply text-3xl font-extrabold; }
+  .bottom-nav { @apply sticky bottom-0 inset-x-0 bg-white/90 backdrop-blur border-t border-slate-200 flex gap-2 p-2; }
+
+  /* Map wrapper */
+  .map-wrap { @apply card p-0; }
+  .map-h { @apply h-80 rounded-2xl overflow-hidden border-2 border-violet-200; }
+
+  /* Animasi util */
+  .anim-pop { animation: pop-in .18s ease-out both; }
+  .anim-flash-green { animation: flash-green .8s ease-out 1; }
+  .anim-shake { animation: shake .25s ease-in-out 1; }
+}
+
+.leaflet-container { background: #fafaff; }
+
+/* Keyframes */
+@keyframes pop-in {
+  from { transform: scale(.98); opacity: .0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+@keyframes flash-green {
+  0% { box-shadow: 0 0 0 0 rgba(16,185,129,.0), inset 0 0 0 0 rgba(16,185,129,.0); }
+  20%{ box-shadow: 0 0 0 6px rgba(16,185,129,.25), inset 0 0 0 9999px rgba(16,185,129,.05); }
+  100%{ box-shadow: 0 0 0 0 rgba(16,185,129,.0), inset 0 0 0 0 rgba(16,185,129,.0); }
+}
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25% { transform: translateX(2px); }
+  50% { transform: translateX(-2px); }
+  75% { transform: translateX(1px); }
+}

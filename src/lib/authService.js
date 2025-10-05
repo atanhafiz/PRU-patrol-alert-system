@@ -1,0 +1,27 @@
+import { supabase } from "./supabaseClient";
+
+/** Sign in pakai email + password */
+export async function signIn(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+
+/** Sign up guard baru */
+export async function signUp(email, password) {
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+
+/** Sign out */
+export async function signOut() {
+  await supabase.auth.signOut();
+}
+
+/** Get user aktif sekarang */
+export async function getUser() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  return data.user;
+}
