@@ -1,45 +1,67 @@
 # ======================================================
-# ⚙️ Base Ignore (React + Vite)
+# 🧱 Node & Build
 # ======================================================
-node_modules
-dist
-.DS_Store
-*.log
+node_modules/
+dist/
+build/
+.cache/
+.npm/
+.pnpm-store/
+vite-cache/
 *.lock
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+*.log
 
 # ======================================================
-# ⚙️ Environment Files
+# 🔐 Environment Files
 # ======================================================
 .env
-.env.*
-!.env.sample
-!.env.example
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+.env.example
+.env.sample.local
 
 # ======================================================
-# ⚙️ Build & Cache
+# 🗂️ System & Editor Files
 # ======================================================
-.vite
-.cache
-coverage
-*.local
-
-# ======================================================
-# ⚙️ System / Editor Files
-# ======================================================
-.idea
-.vscode/*
-!.vscode/extensions.json
-*.sw?
+.DS_Store
 Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+*.bak
+*.old
+*.orig
 
 # ======================================================
-# ⚙️ Supabase & Netlify
+# 🧪 Testing & Coverage
 # ======================================================
-supabase/.temp
-supabase/.cache
-netlify.toml
-netlify/
-functions/
+coverage/
+*.lcov
+jest/
+cypress/screenshots/
+cypress/videos/
+
+# ======================================================
+# 🧩 Supabase Local Config
+# ======================================================
+supabase/.temp/
+supabase/.env
+supabase/migrations/.shadow/
+supabase/.branches/
+supabase/.cache/
+
+# ======================================================
+# 🧠 Backup / Misc
+# ======================================================
+*.tar.gz
+*.zip
+*.rar
+*.7z
+*.bak
+*.old
+*.log
