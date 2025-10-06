@@ -17,7 +17,7 @@ export default function Patrol() {
   const [openStart, setOpenStart] = useState(false);
   const [openEnd, setOpenEnd] = useState(false);
   const [tracking, setTracking] = useState(false);
-  const [mapKey, setMapKey] = useState(Date.now()); // 🔁 reset map setiap sesi
+  const [mapKey, setMapKey] = useState(Date.now());
   const navigate = useNavigate();
   const { state } = useLocation();
   const guardName = state?.guardName || "Unknown Guard";
@@ -36,6 +36,7 @@ export default function Patrol() {
     );
   };
 
+  // 🧩 Hantar Ringkasan ke Supabase + Telegram
   const handleStop = async (summary) => {
     if (!summary) {
       alert("⚠️ Tiada data ringkasan diterima daripada GPS.");
@@ -47,6 +48,28 @@ export default function Patrol() {
     try {
       const { avg, max, distance, duration } = summary;
 
+      // 📍 Dapatkan lokasi semasa guard tekan Stop
+      let latitude = null;
+      let longitude = null;
+
+      if (navigator.geolocation) {
+        await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              latitude = pos.coords.latitude;
+              longitude = pos.coords.longitude;
+              resolve();
+            },
+            (err) => {
+              console.warn("GPS error (stop patrol):", err);
+              resolve();
+            },
+            { enableHighAccuracy: true, timeout: 8000 }
+          );
+        });
+      }
+
+      // 🪣 Simpan ke Supabase
       const { error } = await supabase.from("patrol_summary").insert([
         {
           guard_name: guardName,
@@ -55,19 +78,24 @@ export default function Patrol() {
           max_speed: max,
           distance_km: distance,
           duration,
-          start_time: new Date(Date.now() - parseInt(duration.split(":")[0]) * 3600000),
+          latitude,
+          longitude,
+          start_time: new Date(
+            Date.now() - parseInt(duration.split(":")[0]) * 3600000
+          ),
           end_time: new Date(),
         },
       ]);
       if (error) throw error;
       alert("📦 Data rondaan berjaya disimpan ke Supabase!");
 
+      // 📢 Hantar ke Telegram
       const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
       const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID;
 
-      const text = `🚨 *Ringkasan Rondaan PRU Patrol*\n\n👮 Guard: ${guardName}\n🛵 Plate: ${plateNo}\n🏎️ Purata: ${avg} km/h\n⚡ Max: ${max} km/h\n📏 Jarak: ${distance} km\n⏱️ Tempoh: ${duration}\n🕒 ${new Date().toLocaleString(
-        "en-MY"
-      )}`;
+      const text = `🚨 *Ringkasan Rondaan PRU Patrol*\n\n👮 Guard: ${guardName}\n🛵 Plate: ${plateNo}\n🏎️ Purata: ${avg} km/h\n⚡ Max: ${max} km/h\n📏 Jarak: ${distance} km\n⏱️ Tempoh: ${duration}\n🌍 Koordinat: ${latitude?.toFixed(
+        5
+      )}, ${longitude?.toFixed(5)}\n🕒 ${new Date().toLocaleString("en-MY")}`;
 
       await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
         method: "POST",
@@ -99,9 +127,9 @@ export default function Patrol() {
   // ▶️ Mula patrol semula
   const startPatrol = () => {
     setOpenStart(true);
-    setTracking(false); // pastikan watcher clear
+    setTracking(false);
     setTimeout(() => {
-      setMapKey(Date.now()); // refresh MapView instance
+      setMapKey(Date.now());
       setTracking(true);
     }, 500);
   };
@@ -140,7 +168,11 @@ export default function Patrol() {
         </button>
         {openStart && (
           <div className="mt-3 flex justify-center">
-            <SelfieUploader label="Selfie-Start" guardName={guardName} plateNo={plateNo} />
+            <SelfieUploader
+              label="Selfie-Start"
+              guardName={guardName}
+              plateNo={plateNo}
+            />
             <button
               onClick={() => setOpenStart(false)}
               className="ml-2 px-3 py-2 rounded bg-gray-200 text-sm"
@@ -190,7 +222,11 @@ export default function Patrol() {
         </button>
         {openEnd && (
           <div className="mt-3 flex justify-center">
-            <SelfieUploader label="Selfie-End" guardName={guardName} plateNo={plateNo} />
+            <SelfieUploader
+              label="Selfie-End"
+              guardName={guardName}
+              plateNo={plateNo}
+            />
             <button
               onClick={() => setOpenEnd(false)}
               className="ml-2 px-3 py-2 rounded bg-gray-200 text-sm"

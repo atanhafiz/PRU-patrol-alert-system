@@ -28,6 +28,7 @@ export default function LightLayout() {
         <NavLink to="/light/patrol" className={tabClass}>🪪 Patrol</NavLink>
         <NavLink to="/light/report" className={tabClass}>📋 Report</NavLink>
         <NavLink to="/light/history" className={tabClass}>🕘 History</NavLink>
+        <NavLink to="/light/map" className={tabClass}>🗺️ Map</NavLink>
       </nav>
     </div>
   );
