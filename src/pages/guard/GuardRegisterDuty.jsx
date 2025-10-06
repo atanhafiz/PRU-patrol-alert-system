@@ -13,11 +13,11 @@ export default function GuardRegisterDuty() {
   const [loading, setLoading] = useState(false);
   const [activeGuard, setActiveGuard] = useState(null);
 
-  // 🛰️ Ambil senarai guard dari Supabase
+  // Ambil senarai guard
   const fetchGuards = async () => {
     const { data, error } = await supabase
       .from("guards")
-      .select("id, full_name, shift, company, is_active")
+      .select("id, full_name, shift, company, is_active, status")
       .order("full_name", { ascending: true });
 
     if (error) {
@@ -28,7 +28,7 @@ export default function GuardRegisterDuty() {
     }
   };
 
-  // ✅ Realtime + auto fetch
+  // Auto fetch & realtime
   useEffect(() => {
     fetchGuards();
 
@@ -40,22 +40,18 @@ export default function GuardRegisterDuty() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "guards" },
-        (payload) => {
-          console.log("Realtime update:", payload);
-          fetchGuards();
-        }
+        fetchGuards
       )
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // 🧭 Ambil lokasi GPS
+  // Dapatkan lokasi
   const getLocation = () =>
     new Promise((resolve) => {
       if (!navigator.geolocation)
         return resolve({ lat: null, lon: null });
-
       navigator.geolocation.getCurrentPosition(
         (pos) =>
           resolve({
@@ -67,7 +63,7 @@ export default function GuardRegisterDuty() {
       );
     });
 
-  // 🟢 Start duty
+  // Start duty (masuk shift)
   const handleStart = async () => {
     if (!selectedGuard) {
       showToast("Sila pilih nama guard", "error");
@@ -80,14 +76,11 @@ export default function GuardRegisterDuty() {
 
     setLoading(true);
     try {
-      const { lat, lon } = await getLocation();
-
       const { error } = await supabase
         .from("guards")
         .update({
-          is_active: true,
-          last_lat: lat,
-          last_lon: lon,
+          is_active: false,
+          status: "on_duty",
           updated_at: new Date().toISOString(),
         })
         .eq("id", selectedGuard);
@@ -97,8 +90,8 @@ export default function GuardRegisterDuty() {
       setActiveGuard(selectedGuard);
       localStorage.setItem("active_guard_id", selectedGuard);
 
-      showToast("✅ Duty dimulakan", "success");
-      alert(`✅ Duty dimulakan!\nPlat: ${plateNo}\nLat: ${lat}\nLon: ${lon}`);
+      showToast("✅ Duty bermula (menunggu Selfie-Start)", "success");
+      alert("✅ Guard telah mula shift.\nSila tekan Selfie-Start bila ronda bermula.");
     } catch (err) {
       console.error(err);
       showToast("Gagal mula duty: " + err.message, "error");
@@ -106,7 +99,7 @@ export default function GuardRegisterDuty() {
     setLoading(false);
   };
 
-  // 🔴 Stop duty
+  // Stop duty (selesai shift)
   const handleStop = async () => {
     if (!activeGuard) {
       showToast("Tiada guard aktif", "error");
@@ -119,6 +112,7 @@ export default function GuardRegisterDuty() {
         .from("guards")
         .update({
           is_active: false,
+          status: "off_duty",
           updated_at: new Date().toISOString(),
         })
         .eq("id", activeGuard);
@@ -126,7 +120,7 @@ export default function GuardRegisterDuty() {
       if (error) throw error;
 
       showToast("🚨 Duty ditamatkan", "success");
-      alert("🚨 Duty ditamatkan!");
+      alert("🚨 Duty tamat, terima kasih!");
 
       setActiveGuard(null);
       setSelectedGuard("");
@@ -143,7 +137,7 @@ export default function GuardRegisterDuty() {
     <div className="min-h-screen bg-white p-6">
       <LoaderOverlay show={loading} />
 
-      {/* 🔙 Back Button */}
+      {/* Butang balik */}
       <button
         onClick={() => navigate("/guard/dashboard")}
         className="mb-4 px-4 py-2 rounded-full bg-gray-200 hover:bg-gray-300 shadow text-sm font-medium"
@@ -155,7 +149,7 @@ export default function GuardRegisterDuty() {
         Register Duty
       </h1>
 
-      {/* Form Register Duty */}
+      {/* Form daftar */}
       <div className="max-w-md mx-auto bg-white border rounded-xl shadow-lg p-6">
         <label className="block text-sm font-medium mb-1">Nama Guard</label>
         <select
@@ -201,10 +195,10 @@ export default function GuardRegisterDuty() {
         </div>
       </div>
 
-      {/* Senarai guard aktif */}
+      {/* Senarai guard */}
       <div className="max-w-2xl mx-auto mt-8 bg-white border rounded-xl shadow p-4">
         <h2 className="text-lg font-semibold mb-3 text-gray-700 text-center">
-          Senarai Guard Aktif
+          Senarai Guard
         </h2>
         <table className="w-full text-sm border">
           <thead className="bg-gray-100">
@@ -224,12 +218,18 @@ export default function GuardRegisterDuty() {
                 <td className="p-2">
                   <span
                     className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                      g.is_active
+                      g.status === "on_patrol"
                         ? "bg-green-100 text-green-700"
+                        : g.status === "on_duty"
+                        ? "bg-yellow-100 text-yellow-700"
                         : "bg-gray-100 text-gray-500"
                     }`}
                   >
-                    {g.is_active ? "On Duty" : "Off Duty"}
+                    {g.status === "on_patrol"
+                      ? "On Patrol"
+                      : g.status === "on_duty"
+                      ? "On Duty"
+                      : "Off Duty"}
                   </span>
                 </td>
               </tr>

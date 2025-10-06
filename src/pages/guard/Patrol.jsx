@@ -1,10 +1,11 @@
+// src/pages/guard/Patrol.jsx
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import HouseSnapUploader from "../../components/HouseSnapUploader";
 import SelfieUploader from "../../components/SelfieUploader";
 import EmergencyButton from "../../components/EmergencyButton";
 import MapView from "../../components/MapView";
-import supabase from "../../services/supabaseClient";
+import { supabase } from "../../lib/supabaseClient";
 
 const initialHouses = Array.from({ length: 7 }).map((_, i) => ({
   id: i + 1,
@@ -36,22 +37,37 @@ export default function Patrol() {
     );
   };
 
-  // 🧩 Hantar Ringkasan ke Supabase + Telegram
+  // Bila selfie-start → mark on_patrol
+  const handleSelfieStart = async () => {
+    setOpenStart(true);
+    setTracking(false);
+    try {
+      const { data, error } = await supabase
+        .from("guards")
+        .update({ is_active: true, status: "on_patrol" })
+        .eq("full_name", guardName);
+      if (error) throw error;
+      console.log("✅ Guard on patrol:", guardName);
+    } catch (err) {
+      console.error("❌ Gagal update on_patrol:", err.message);
+    }
+    setTimeout(() => {
+      setMapKey(Date.now());
+      setTracking(true);
+    }, 500);
+  };
+
   const handleStop = async (summary) => {
     if (!summary) {
       alert("⚠️ Tiada data ringkasan diterima daripada GPS.");
       return;
     }
-
     console.log("📊 Ringkasan Rondaan:", summary);
 
     try {
       const { avg, max, distance, duration } = summary;
-
-      // 📍 Dapatkan lokasi semasa guard tekan Stop
       let latitude = null;
       let longitude = null;
-
       if (navigator.geolocation) {
         await new Promise((resolve) => {
           navigator.geolocation.getCurrentPosition(
@@ -61,7 +77,7 @@ export default function Patrol() {
               resolve();
             },
             (err) => {
-              console.warn("GPS error (stop patrol):", err);
+              console.warn("GPS error:", err);
               resolve();
             },
             { enableHighAccuracy: true, timeout: 8000 }
@@ -69,8 +85,8 @@ export default function Patrol() {
         });
       }
 
-      // 🪣 Simpan ke Supabase
-      const { error } = await supabase.from("patrol_summary").insert([
+      // Simpan ke Supabase
+      const { error: insertErr } = await supabase.from("patrol_summary").insert([
         {
           guard_name: guardName,
           plate_no: plateNo,
@@ -86,52 +102,19 @@ export default function Patrol() {
           end_time: new Date(),
         },
       ]);
-      if (error) throw error;
-      alert("📦 Data rondaan berjaya disimpan ke Supabase!");
+      if (insertErr) throw insertErr;
 
-      // 📢 Hantar ke Telegram
-      const TELEGRAM_BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
-      const TELEGRAM_CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID;
+      // Tamat duty bila stop rondaan
+      await supabase
+        .from("guards")
+        .update({ is_active: false, status: "off_duty" })
+        .eq("full_name", guardName);
 
-      const text = `🚨 *Ringkasan Rondaan PRU Patrol*\n\n👮 Guard: ${guardName}\n🛵 Plate: ${plateNo}\n🏎️ Purata: ${avg} km/h\n⚡ Max: ${max} km/h\n📏 Jarak: ${distance} km\n⏱️ Tempoh: ${duration}\n🌍 Koordinat: ${latitude?.toFixed(
-        5
-      )}, ${longitude?.toFixed(5)}\n🕒 ${new Date().toLocaleString("en-MY")}`;
-
-      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text,
-          parse_mode: "Markdown",
-        }),
-      });
-
-      alert("🚀 Ringkasan rondaan dihantar ke Telegram Control Room!");
+      alert("✅ Rondaan disimpan & guard tamat duty!");
     } catch (err) {
-      console.error("❌ Gagal simpan atau hantar:", err);
+      console.error("❌ Gagal simpan data rondaan:", err.message);
       alert("❌ Gagal simpan / hantar data rondaan.");
     }
-  };
-
-  // 🛑 Stop patrol manual
-  const stopPatrolManually = () => {
-    if (!tracking) {
-      alert("⚠️ Tiada sesi aktif untuk dihentikan.");
-      return;
-    }
-    setTracking(false);
-    alert("⏹️ Patrol dihentikan. Ringkasan sedang diproses...");
-  };
-
-  // ▶️ Mula patrol semula
-  const startPatrol = () => {
-    setOpenStart(true);
-    setTracking(false);
-    setTimeout(() => {
-      setMapKey(Date.now());
-      setTracking(true);
-    }, 500);
   };
 
   return (
@@ -158,10 +141,10 @@ export default function Patrol() {
         </div>
       </div>
 
-      {/* === Selfie Start === */}
+      {/* Selfie Start */}
       <div className="mb-4">
         <button
-          onClick={startPatrol}
+          onClick={handleSelfieStart}
           className="w-full py-3 rounded-xl bg-indigo-600 text-white font-semibold shadow hover:scale-105 active:scale-95 transition animate-pulse"
         >
           📸 Selfie-Start
@@ -183,7 +166,7 @@ export default function Patrol() {
         )}
       </div>
 
-      {/* === List Rumah === */}
+      {/* Senarai Rumah */}
       <div className="space-y-3">
         {items.map((it) => (
           <div
@@ -212,7 +195,7 @@ export default function Patrol() {
         ))}
       </div>
 
-      {/* === Selfie End === */}
+      {/* Selfie End */}
       <div className="mt-4">
         <button
           onClick={() => setOpenEnd(true)}
@@ -237,17 +220,16 @@ export default function Patrol() {
         )}
       </div>
 
-      {/* === 🛑 STOP PATROL BUTTON === */}
+      {/* Stop Patrol */}
       <div className="mt-6">
         <button
-          onClick={stopPatrolManually}
+          onClick={() => handleStop()}
           className="w-full py-3 rounded-xl bg-red-700 text-white font-semibold shadow hover:scale-105 active:scale-95 transition"
         >
           🛑 Stop Patrol & Hantar Ringkasan
         </button>
       </div>
 
-      {/* === MapView (resettable) === */}
       <div className="mt-6">
         <MapView key={mapKey} isActive={tracking} onStop={handleStop} />
       </div>
