@@ -1,3 +1,4 @@
+// src/pages/admin/MapViewRealtime.jsx
 import { useEffect, useState, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import { supabase } from "../../lib/supabaseAutoClient";
@@ -10,13 +11,11 @@ import { motion } from "framer-motion";
 const baseIcon = (color = "green") =>
   new L.Icon({
     iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`,
-    shadowUrl:
-      "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
     iconSize: [25, 41],
     iconAnchor: [12, 41],
   });
 
-// warna ikut shift
 const getColor = (shift) => {
   if (!shift) return "gray";
   const s = shift.toLowerCase();
@@ -25,7 +24,6 @@ const getColor = (shift) => {
   return "green";
 };
 
-// radar animasi
 function RadarPulse({ color = "green" }) {
   return (
     <motion.div
@@ -50,7 +48,6 @@ function RadarPulse({ color = "green" }) {
   );
 }
 
-// marker guard
 function GuardMarker({ guard, popupContent, isNew, onFocus }) {
   const [blink, setBlink] = useState(isNew);
   const color = getColor(guard.shift);
@@ -74,21 +71,13 @@ function GuardMarker({ guard, popupContent, isNew, onFocus }) {
           animate={{ opacity: [0.3, 1, 0.3, 1] }}
           transition={{ duration: 1, repeat: Infinity }}
         >
-          <Marker
-            position={[lat, lon]}
-            icon={icon}
-            eventHandlers={{ click: () => onFocus([lat, lon], guard) }}
-          >
+          <Marker position={[lat, lon]} icon={icon} eventHandlers={{ click: () => onFocus([lat, lon], guard) }}>
             <Popup>{popupContent}</Popup>
           </Marker>
         </motion.div>
       ) : (
         <>
-          <Marker
-            position={[lat, lon]}
-            icon={icon}
-            eventHandlers={{ click: () => onFocus([lat, lon], guard) }}
-          >
+          <Marker position={[lat, lon]} icon={icon} eventHandlers={{ click: () => onFocus([lat, lon], guard) }}>
             <Popup>{popupContent}</Popup>
           </Marker>
           <RadarPulse color={color} />
@@ -98,13 +87,10 @@ function GuardMarker({ guard, popupContent, isNew, onFocus }) {
   );
 }
 
-// auto zoom
 function useFlyTo(coord) {
   const map = useMap();
   useEffect(() => {
-    if (coord && coord[0] && coord[1]) {
-      map.flyTo(coord, 17, { duration: 1.5 });
-    }
+    if (coord && coord[0] && coord[1]) map.flyTo(coord, 17, { duration: 1.5 });
   }, [coord]);
   return null;
 }
@@ -116,10 +102,11 @@ export default function MapViewRealtime() {
   const [focusCoord, setFocusCoord] = useState(null);
   const [focusGuard, setFocusGuard] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [routes, setRoutes] = useState([]); // 🆕 patrol_runs listener
   const { showToast } = useToast();
   const mapRef = useRef();
 
-  // ambil semua guard aktif (on_patrol)
+  // ambil guard aktif
   const fetchGuards = async () => {
     const { data, error } = await supabase
       .from("guards")
@@ -146,57 +133,69 @@ export default function MapViewRealtime() {
     if (!error) setSummary(data[0] || null);
   };
 
+  // 🆕 Fetch route
+  const fetchRoutes = async () => {
+    const { data, error } = await supabase
+      .from("patrol_runs")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) console.error(error);
+    else setRoutes(data || []);
+  };
+
   useEffect(() => {
     fetchGuards();
+    fetchRoutes();
 
-    const channel = supabase
+    // ====== Guards Realtime ======
+    const guardChannel = supabase
       .channel("guards-command-hq")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "guards" },
-        (payload) => {
-          if (
-            payload.eventType === "UPDATE" &&
-            (payload.new.is_active === true ||
-              payload.new.status === "on_patrol")
-          ) {
-            setNewGuardId(payload.new.id);
-            setFocusCoord([payload.new.last_lat, payload.new.last_lon]);
-            setGuards((prev) => {
-              const exist = prev.find((g) => g.id === payload.new.id);
-              if (exist)
-                return prev.map((g) =>
-                  g.id === payload.new.id ? payload.new : g
-                );
-              else return [...prev, payload.new];
-            });
-            showToast(`🚨 ${payload.new.full_name} mula rondaan!`, "success");
-          }
-          if (
-            payload.eventType === "UPDATE" &&
-            payload.new.is_active === false
-          ) {
-            setGuards((prev) => prev.filter((g) => g.id !== payload.new.id));
-            showToast(`❎ ${payload.new.full_name} tamat duty.`, "info");
-          }
-          if (
-            payload.eventType === "UPDATE" &&
-            payload.new.is_active === true
-          ) {
-            setPaths((prev) => {
-              const id = payload.new.id;
-              const lat = payload.new.last_lat;
-              const lon = payload.new.last_lon;
-              if (!lat || !lon) return prev;
-              const newPath = [...(prev[id] || []), [lat, lon]].slice(-10);
-              return { ...prev, [id]: newPath };
-            });
-          }
+      .on("postgres_changes", { event: "*", schema: "public", table: "guards" }, (payload) => {
+        if (
+          payload.eventType === "UPDATE" &&
+          (payload.new.is_active === true || payload.new.status === "on_patrol")
+        ) {
+          setNewGuardId(payload.new.id);
+          setFocusCoord([payload.new.last_lat, payload.new.last_lon]);
+          setGuards((prev) => {
+            const exist = prev.find((g) => g.id === payload.new.id);
+            if (exist)
+              return prev.map((g) => (g.id === payload.new.id ? payload.new : g));
+            else return [...prev, payload.new];
+          });
+          showToast(`🚨 ${payload.new.full_name} mula rondaan!`, "success");
         }
-      )
+        if (payload.eventType === "UPDATE" && payload.new.is_active === false) {
+          setGuards((prev) => prev.filter((g) => g.id !== payload.new.id));
+          showToast(`❎ ${payload.new.full_name} tamat duty.`, "info");
+        }
+        if (payload.eventType === "UPDATE" && payload.new.is_active === true) {
+          setPaths((prev) => {
+            const id = payload.new.id;
+            const lat = payload.new.last_lat;
+            const lon = payload.new.last_lon;
+            if (!lat || !lon) return prev;
+            const newPath = [...(prev[id] || []), [lat, lon]].slice(-10);
+            return { ...prev, [id]: newPath };
+          });
+        }
+      })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    // ====== PatrolRuns Realtime V2 ======
+    const routeChannel = supabase
+      .channel("realtime:public:patrol_runs")
+      .on("postgres_changes", { event: "*", schema: "public", table: "patrol_runs" }, (payload) => {
+        console.log("📡 patrol_runs change:", payload);
+        fetchRoutes(); // refresh data
+        showToast("📍 Update dari patrol_runs (Realtime)", "info");
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(guardChannel);
+      supabase.removeChannel(routeChannel);
+    };
   }, []);
 
   const center = guards.length
@@ -261,6 +260,8 @@ export default function MapViewRealtime() {
             attribution="© OpenStreetMap contributors"
           />
           <useFlyTo coord={focusCoord} />
+
+          {/* 🧭 Marker guard */}
           {guards.map((g) => {
             if (!g.last_lat || !g.last_lon) return null;
             const color = getColor(g.shift);
@@ -275,8 +276,7 @@ export default function MapViewRealtime() {
                   Lat: {g.last_lat?.toFixed(5)}, Lon: {g.last_lon?.toFixed(5)}
                 </p>
                 <p className="text-xs text-gray-400">
-                  ⏱️{" "}
-                  {new Date(g.updated_at || g.created_at).toLocaleString()}
+                  ⏱️ {new Date(g.updated_at || g.created_at).toLocaleString()}
                 </p>
               </div>
             );
@@ -300,10 +300,31 @@ export default function MapViewRealtime() {
               </div>
             );
           })}
+
+          {/* 🆕 Marker route dari patrol_runs */}
+          {routes.map((r) => {
+            if (!r.blok || !r.house_no) return null;
+            const lat = 3.139 + (parseInt(r.house_no) || 0) * 0.00002;
+            const lng = 101.6869 + (r.blok === "Merah" ? 0.0003 : 0);
+            return (
+              <Marker
+                key={r.id}
+                position={[lat, lng]}
+                icon={baseIcon(r.status === "done" ? "green" : "red")}
+              >
+                <Popup>
+                  <b>Rumah:</b> {r.house_no} <br />
+                  <b>Blok:</b> {r.blok} <br />
+                  <b>Status:</b>{" "}
+                  <span className="capitalize">{r.status}</span>
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
       </div>
 
-      {/* Command Panel kanan */}
+      {/* panel kanan */}
       <div className="w-1/4 bg-white rounded-2xl shadow overflow-y-auto p-4 border">
         <h2 className="text-lg font-bold text-indigo-600 mb-3">🧭 Command Panel</h2>
         {focusGuard ? (
@@ -353,9 +374,7 @@ export default function MapViewRealtime() {
 
             <div className="flex gap-2">
               <button
-                onClick={() =>
-                  setFocusCoord([focusGuard.last_lat, focusGuard.last_lon])
-                }
+                onClick={() => setFocusCoord([focusGuard.last_lat, focusGuard.last_lon])}
                 className="flex-1 bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm hover:bg-indigo-700"
               >
                 🎯 Fokus Map
