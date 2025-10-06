@@ -24,6 +24,7 @@ export default function Patrol() {
   const guardName = state?.guardName || "Unknown Guard";
   const plateNo = state?.plateNo || "-";
 
+  // ========================== UTIL ==========================
   const skip = (id) =>
     setItems((prev) =>
       prev.map((x) => (x.id === id ? { ...x, status: "skipped" } : x))
@@ -31,43 +32,80 @@ export default function Patrol() {
 
   const doneCount = items.filter((x) => x.status === "done").length;
 
-  const markDone = (id) => {
+  const markDone = (id) =>
     setItems((prev) =>
       prev.map((x) => (x.id === id ? { ...x, status: "done" } : x))
     );
-  };
 
-  // Bila selfie-start → mark on_patrol
+  // ========================== SELFIE START ==========================
   const handleSelfieStart = async () => {
-    setOpenStart(true);
-    setTracking(false);
     try {
-      const { data, error } = await supabase
+      setOpenStart(true);
+      setTracking(false);
+
+      // ambil lokasi GPS guard masa mula patrol
+      let latitude = null;
+      let longitude = null;
+      if (navigator.geolocation) {
+        await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              latitude = pos.coords.latitude;
+              longitude = pos.coords.longitude;
+              resolve();
+            },
+            (err) => {
+              console.warn("GPS error (selfie-start):", err);
+              resolve();
+            },
+            { enableHighAccuracy: true, timeout: 8000 }
+          );
+        });
+      }
+
+      // update table guards supaya HQ detect aktif
+      const { error } = await supabase
         .from("guards")
-        .update({ is_active: true, status: "on_patrol" })
+        .update({
+          is_active: true,
+          status: "on_patrol",
+          last_lat: latitude,
+          last_lon: longitude,
+          updated_at: new Date().toISOString(),
+        })
         .eq("full_name", guardName);
+
       if (error) throw error;
-      console.log("✅ Guard on patrol:", guardName);
+
+      alert(
+        `📸 Selfie-Start berjaya!\nGuard kini On Patrol.\nKoordinat:\nLat: ${latitude}\nLon: ${longitude}`
+      );
+      console.log("✅ Guard aktif di HQ:", guardName);
+
+      // reset map
+      setTimeout(() => {
+        setMapKey(Date.now());
+        setTracking(true);
+      }, 500);
     } catch (err) {
-      console.error("❌ Gagal update on_patrol:", err.message);
+      console.error("❌ Gagal mula patrol:", err.message);
+      alert("❌ Gagal mula rondaan (GPS / server error).");
     }
-    setTimeout(() => {
-      setMapKey(Date.now());
-      setTracking(true);
-    }, 500);
   };
 
+  // ========================== STOP PATROL ==========================
   const handleStop = async (summary) => {
     if (!summary) {
       alert("⚠️ Tiada data ringkasan diterima daripada GPS.");
       return;
     }
-    console.log("📊 Ringkasan Rondaan:", summary);
 
+    console.log("📊 Ringkasan Rondaan:", summary);
     try {
       const { avg, max, distance, duration } = summary;
       let latitude = null;
       let longitude = null;
+
       if (navigator.geolocation) {
         await new Promise((resolve) => {
           navigator.geolocation.getCurrentPosition(
@@ -85,7 +123,7 @@ export default function Patrol() {
         });
       }
 
-      // Simpan ke Supabase
+      // Simpan ke table patrol_summary
       const { error: insertErr } = await supabase.from("patrol_summary").insert([
         {
           guard_name: guardName,
@@ -104,10 +142,14 @@ export default function Patrol() {
       ]);
       if (insertErr) throw insertErr;
 
-      // Tamat duty bila stop rondaan
+      // set guard off_duty lepas hantar report
       await supabase
         .from("guards")
-        .update({ is_active: false, status: "off_duty" })
+        .update({
+          is_active: false,
+          status: "off_duty",
+          updated_at: new Date().toISOString(),
+        })
         .eq("full_name", guardName);
 
       alert("✅ Rondaan disimpan & guard tamat duty!");
@@ -117,6 +159,7 @@ export default function Patrol() {
     }
   };
 
+  // ========================== UI ==========================
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <button
@@ -149,6 +192,7 @@ export default function Patrol() {
         >
           📸 Selfie-Start
         </button>
+
         {openStart && (
           <div className="mt-3 flex justify-center">
             <SelfieUploader
@@ -175,7 +219,9 @@ export default function Patrol() {
           >
             <div>
               <div className="font-medium">{it.label}</div>
-              <div className="text-xs text-gray-500 capitalize">{it.status}</div>
+              <div className="text-xs text-gray-500 capitalize">
+                {it.status}
+              </div>
             </div>
             <div className="flex gap-2">
               <HouseSnapUploader
