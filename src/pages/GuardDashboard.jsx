@@ -5,12 +5,10 @@ import EmergencyButton from "../components/EmergencyButton";
 
 export default function GuardDashboard() {
   const navigate = useNavigate();
-  const [showRegisterPopup, setShowRegisterPopup] = useState(false);
-  const [showReportPopup, setShowReportPopup] = useState(false);
-
   const [guardName, setGuardName] = useState("");
   const [plateNo, setPlateNo] = useState("");
   const [reportText, setReportText] = useState("");
+  const [showReportPopup, setShowReportPopup] = useState(false);
 
   return (
     <div className="p-6 relative min-h-[80vh]">
@@ -29,11 +27,11 @@ export default function GuardDashboard() {
         </button>
       </div>
 
-      {/* 3 button utama */}
+      {/* 3 butang utama */}
       <div className="max-w-xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
         {/* Register */}
         <button
-          onClick={() => setShowRegisterPopup(true)}
+          onClick={() => navigate("/guard/register")}
           className="flex flex-col items-center justify-center py-6 rounded-2xl 
                      bg-gradient-to-br from-yellow-400 to-orange-500 
                      text-white font-bold shadow-lg hover:scale-105 hover:shadow-2xl
@@ -69,48 +67,6 @@ export default function GuardDashboard() {
           Report
         </button>
       </div>
-
-      {/* ===== POPUP REGISTER ===== */}
-      {showRegisterPopup && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
-            <h2 className="text-lg font-semibold mb-4">Register Duty</h2>
-            <input
-              type="text"
-              placeholder="Nama Guard"
-              className="border rounded-lg px-3 py-2 w-full mb-3"
-              value={guardName}
-              onChange={(e) => setGuardName(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="No. Plat Motosikal"
-              className="border rounded-lg px-3 py-2 w-full mb-3"
-              value={plateNo}
-              onChange={(e) => setPlateNo(e.target.value)}
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowRegisterPopup(false)}
-                className="px-4 py-2 rounded bg-gray-200"
-              >
-                Batal
-              </button>
-              <button
-                onClick={() => {
-                  alert(
-                    `Register Duty ✅\nNama: ${guardName}\nPlat: ${plateNo}`
-                  );
-                  setShowRegisterPopup(false);
-                }}
-                className="px-4 py-2 rounded bg-green-600 text-white"
-              >
-                Simpan
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ===== POPUP REPORT ===== */}
       {showReportPopup && (
@@ -177,7 +133,10 @@ export default function GuardDashboard() {
       </div>
 
       {/* ===== Emergency Button ===== */}
-      <EmergencyButton guardName={guardName || "Unknown"} plateNo={plateNo || "-"} />
+      <EmergencyButton
+        guardName={guardName || "Unknown"}
+        plateNo={plateNo || "-"}
+      />
     </div>
   );
 }

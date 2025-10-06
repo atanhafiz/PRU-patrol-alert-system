@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   DragDropContext,
@@ -8,6 +8,8 @@ import {
 import { MapContainer, TileLayer, Marker, Polyline, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { supabase } from "../../lib/supabaseClient";
+import { useToast } from "../../components/ToastProvider";
 
 // Icon rumah custom (simple)
 const houseIcon = new L.Icon({
@@ -17,15 +19,16 @@ const houseIcon = new L.Icon({
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState("patrol");
   const [showSetting, setShowSetting] = useState(false);
 
-  // Setting admin
+  // ======== SETTING STATE ========
   const [sessionsPerDay, setSessionsPerDay] = useState(6);
   const [housesPerSession, setHousesPerSession] = useState(7);
   const [note, setNote] = useState("");
 
-  // Data sesi & rumah (multi-tab)
+  // ======== PATROL SESSION ========
   const buildSessions = (sesi, rumah) =>
     Array.from({ length: sesi }, (_, i) => ({
       id: `session-${i + 1}`,
@@ -39,7 +42,6 @@ export default function AdminDashboard() {
   const [sessions, setSessions] = useState(buildSessions(sessionsPerDay, housesPerSession));
   const [activeSession, setActiveSession] = useState(0);
 
-  // Drag & drop urutan rumah
   const handleDragEnd = (result) => {
     if (!result.destination) return;
     const newSessions = [...sessions];
@@ -50,9 +52,8 @@ export default function AdminDashboard() {
     setSessions(newSessions);
   };
 
-  // Dummy statistik atas (nanti link Supabase)
   const totalHouses = sessionsPerDay * housesPerSession;
-  const completedHouses = 12; // contoh
+  const completedHouses = 12;
   const progress = Math.round((completedHouses / totalHouses) * 100);
 
   const dummyReports = [
@@ -60,12 +61,82 @@ export default function AdminDashboard() {
     { id: 2, guard: "Abu", text: "Lampu jalan rosak", date: "2025-09-16" },
   ];
 
-  const dummyGuards = [
-    { id: 1, name: "Ali", shift: "Malam", company: "SecurePro" },
-    { id: 2, name: "Abu", shift: "Pagi", company: "PrimaGuard" },
-  ];
+  // ======== GUARD REGISTER (Supabase) ========
+  const [guards, setGuards] = useState([]);
+  const [fullName, setFullName] = useState("");
+  const [shift, setShift] = useState("");
+  const [company, setCompany] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // 👉 Function Auto Generate (link Supabase Edge Function)
+  // Fetch guard data
+  const fetchGuards = async () => {
+    const { data, error } = await supabase
+      .from("guards")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      showToast("Gagal ambil data guard", "error");
+    } else setGuards(data || []);
+  };
+
+  useEffect(() => {
+    fetchGuards();
+
+    // Realtime listener
+    const channel = supabase
+      .channel("guards-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "guards" },
+        () => fetchGuards()
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  // Add new guard
+  const handleAddGuard = async (e) => {
+    e.preventDefault();
+    if (!fullName || !shift || !company) {
+      showToast("Sila isi semua maklumat", "error");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("guards")
+      .insert([{ full_name: fullName, shift, company, is_active: false }]);
+
+    if (error) {
+      console.error(error);
+      showToast("Gagal daftar guard: " + error.message, "error");
+    } else {
+      showToast("✅ Guard berjaya didaftarkan", "success");
+      setFullName("");
+      setShift("");
+      setCompany("");
+      fetchGuards();
+    }
+    setLoading(false);
+  };
+
+  // Delete guard
+  const handleDeleteGuard = async (id) => {
+    if (!window.confirm("Padam guard ini?")) return;
+    const { error } = await supabase.from("guards").delete().eq("id", id);
+    if (error) {
+      console.error(error);
+      showToast("Gagal padam guard", "error");
+    } else {
+      showToast("Guard dipadam ✅", "success");
+      fetchGuards();
+    }
+  };
+
+  // ======== AUTO GENERATE ========
   const autoGenerate = async () => {
     try {
       const res = await fetch(
@@ -90,7 +161,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header / Topbar */}
+      {/* ===== HEADER ===== */}
       <header className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-purple-600 to-indigo-500 shadow">
         <div className="flex items-center gap-3 text-white">
           <img src="/logo.png" alt="Logo" className="w-8 h-8 rounded-full bg-white p-1" />
@@ -104,46 +175,36 @@ export default function AdminDashboard() {
         </button>
       </header>
 
-      {/* Menu Tab */}
+      {/* ===== TABS ===== */}
       <div className="flex justify-center mt-4">
         <div className="flex gap-4">
-          <button
-            onClick={() => setActiveTab("patrol")}
-            className={`px-4 py-2 rounded-xl transition-all ${
-              activeTab === "patrol" ? "bg-purple-600 text-white" : "bg-gray-200 hover:bg-gray-300"
-            }`}
-          >
-            Patrol Session
-          </button>
-          <button
-            onClick={() => setActiveTab("report")}
-            className={`px-4 py-2 rounded-xl transition-all ${
-              activeTab === "report" ? "bg-purple-600 text-white" : "bg-gray-200 hover:bg-gray-300"
-            }`}
-          >
-            Report & Emergency
-          </button>
-          <button
-            onClick={() => setActiveTab("guard")}
-            className={`px-4 py-2 rounded-xl transition-all ${
-              activeTab === "guard" ? "bg-purple-600 text-white" : "bg-gray-200 hover:bg-gray-300"
-            }`}
-          >
-            Guard Register
-          </button>
+          {["patrol", "report", "guard"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-xl transition-all ${
+                activeTab === tab
+                  ? "bg-purple-600 text-white"
+                  : "bg-gray-200 hover:bg-gray-300"
+              }`}
+            >
+              {tab === "patrol"
+                ? "Patrol Session"
+                : tab === "report"
+                ? "Report & Emergency"
+                : "Guard Register"}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Content */}
+      {/* ===== CONTENT ===== */}
       <div className="p-6">
-        {/* PATROL SESSION */}
+        {/* PATROL TAB */}
         {activeTab === "patrol" && (
-          <div className="space-y-6">
-            {/* Duty Summary */}
-            <div className="shadow-lg rounded-xl bg-white p-4">
+          <>
+            <div className="shadow-lg rounded-xl bg-white p-4 mb-6">
               <h2 className="text-xl font-semibold mb-4">Duty Summary</h2>
-
-              {/* Stat cards */}
               <div className="grid grid-cols-4 gap-4 mb-6">
                 <div className="p-4 bg-gray-50 rounded-lg shadow text-center">
                   <p className="text-sm text-gray-500">Target / Hari</p>
@@ -162,110 +223,17 @@ export default function AdminDashboard() {
                   <p className="text-2xl font-bold">{progress}%</p>
                 </div>
               </div>
-
-              {/* Ringkasan sesi */}
-              <h3 className="text-md font-semibold mb-3">
-                Ringkasan {sessionsPerDay} Sesi ({totalHouses} rumah)
-              </h3>
-              <div className="grid grid-cols-3 gap-4">
-                {sessions.map((s, i) => {
-                  const done = i === 0 ? 4 : i === 1 ? housesPerSession : i === 2 ? 1 : 0;
-                  const target = housesPerSession;
-                  const percent = Math.round((done / target) * 100);
-                  const bar =
-                    done === target ? "bg-green-500" : done > 0 ? "bg-orange-500" : "bg-gray-300";
-
-                  return (
-                    <div key={s.id} className="p-3 border rounded-lg shadow-sm bg-white space-y-2">
-                      <p className="text-sm font-medium">{s.name}</p>
-                      <div className="w-full bg-gray-200 h-3 rounded">
-                        <div className={`h-3 rounded ${bar}`} style={{ width: `${percent}%` }} />
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        {done}/{target}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
 
-            {/* Generate Session + Setting */}
-            <div className="shadow-lg rounded-xl bg-white p-4">
-              <h2 className="text-lg font-semibold mb-3">Generate Session</h2>
-              <div className="flex gap-3">
-                <button
-                  onClick={autoGenerate}
-                  className="bg-gradient-to-r from-purple-600 to-indigo-500 text-white rounded-xl px-4 py-2 hover:scale-105 transition-all duration-300"
-                >
-                  Auto Generate ({sessionsPerDay} sesi × {housesPerSession} rumah)
-                </button>
-                <button
-                  onClick={() => setShowSetting(true)}
-                  className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl px-4 py-2 hover:scale-105 transition-all duration-300"
-                >
-                  ⚙️ Setting
-                </button>
-              </div>
-              {note && <p className="text-sm text-gray-500 mt-2">Nota: {note}</p>}
-            </div>
-
-            {/* Review / Edit */}
-            <div className="shadow-lg rounded-xl bg-white p-4">
-              <h2 className="text-lg font-semibold mb-3">Review / Edit Rumah</h2>
-              <div className="flex gap-2 mb-4">
-                {sessions.map((s, i) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setActiveSession(i)}
-                    className={`px-3 py-1 rounded-lg text-sm ${
-                      i === activeSession ? "bg-purple-600 text-white" : "bg-gray-200 hover:bg-gray-300"
-                    }`}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-              <DragDropContext onDragEnd={handleDragEnd}>
-                <Droppable droppableId="houses">
-                  {(provided) => (
-                    <ul {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
-                      {sessions[activeSession].houses.map((house, index) => (
-                        <Draggable key={house.id} draggableId={house.id} index={index}>
-                          {(provided) => (
-                            <li
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              ref={provided.innerRef}
-                              className="flex items-center justify-between bg-gray-50 border rounded px-3 py-2 shadow-sm"
-                            >
-                              <input
-                                type="text"
-                                value={house.number}
-                                onChange={(e) => {
-                                  const newSessions = [...sessions];
-                                  newSessions[activeSession].houses[index].number = e.target.value;
-                                  setSessions(newSessions);
-                                }}
-                                className="w-full border-none bg-transparent focus:ring-0"
-                              />
-                              <span className="text-gray-400 cursor-move">⠿</span>
-                            </li>
-                          )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                    </ul>
-                  )}
-                </Droppable>
-              </DragDropContext>
-            </div>
-
-            {/* Map View */}
+            {/* MAP VIEW (Patrol) */}
             <div className="shadow-lg rounded-xl bg-white p-4">
               <h2 className="text-lg font-semibold mb-3">Map View</h2>
               <div className="w-full h-96 rounded overflow-hidden">
-                <MapContainer center={[3.139, 101.6869]} zoom={16} style={{ height: "100%", width: "100%" }}>
+                <MapContainer
+                  center={[3.139, 101.6869]}
+                  zoom={16}
+                  style={{ height: "100%", width: "100%" }}
+                >
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution="&copy; OpenStreetMap contributors"
@@ -273,10 +241,9 @@ export default function AdminDashboard() {
                   {sessions[activeSession].houses.map((house, index) => {
                     const lat = 3.139 + index * 0.0002;
                     const lng = 101.6869 + index * 0.0002;
-                    let status = "belum";
-                    if (index < 3) status = "siap";
-                    else if (index === 3) status = "jalan";
-                    const color = status === "siap" ? "green" : status === "jalan" ? "orange" : "red";
+                    let status = index < 3 ? "siap" : index === 3 ? "jalan" : "belum";
+                    const color =
+                      status === "siap" ? "green" : status === "jalan" ? "orange" : "red";
                     return (
                       <Marker key={house.id} position={[lat, lng]} icon={houseIcon}>
                         <Popup>
@@ -284,31 +251,26 @@ export default function AdminDashboard() {
                           <br />
                           Status:{" "}
                           <span className="font-semibold" style={{ color }}>
-                            {status === "siap" ? "Siap" : status === "jalan" ? "Tengah Jalan" : "Belum Mula"}
+                            {status === "siap"
+                              ? "Siap"
+                              : status === "jalan"
+                              ? "Tengah Jalan"
+                              : "Belum Mula"}
                           </span>
                         </Popup>
                       </Marker>
                     );
                   })}
-                  {sessions[activeSession].houses.map((_, index, arr) => {
-                    if (index === arr.length - 1) return null;
-                    const latlng1 = [3.139 + index * 0.0002, 101.6869 + index * 0.0002];
-                    const latlng2 = [3.139 + (index + 1) * 0.0002, 101.6869 + (index + 1) * 0.0002];
-                    let color = "red";
-                    if (index < 3) color = "green";
-                    else if (index === 3) color = "orange";
-                    return <Polyline key={index} positions={[latlng1, latlng2]} color={color} weight={5} />;
-                  })}
                 </MapContainer>
               </div>
             </div>
-          </div>
+          </>
         )}
 
-        {/* REPORT & EMERGENCY */}
+        {/* REPORT TAB */}
         {activeTab === "report" && (
-          <div className="space-y-6">
-            <div className="shadow-lg rounded-xl bg-white p-4">
+          <>
+            <div className="shadow-lg rounded-xl bg-white p-4 mb-4">
               <h2 className="text-lg font-semibold mb-3">Senarai Report Guard</h2>
               <table className="w-full border">
                 <thead>
@@ -330,108 +292,110 @@ export default function AdminDashboard() {
               </table>
             </div>
             <div className="shadow-lg rounded-xl bg-white p-4 bg-red-100 border border-red-400">
-              <h2 className="text-lg font-semibold text-red-700 mb-3">Emergency Alert</h2>
+              <h2 className="text-lg font-semibold text-red-700 mb-3">
+                Emergency Alert
+              </h2>
               <p className="text-red-600">⚠️ Guard tekan butang kecemasan!</p>
             </div>
-          </div>
+          </>
         )}
 
-        {/* GUARD REGISTER */}
+        {/* GUARD REGISTER TAB (LIVE SUPABASE) */}
         {activeTab === "guard" && (
           <div className="space-y-6">
+            <form
+              onSubmit={handleAddGuard}
+              className="bg-white border rounded-xl shadow-sm p-4 mb-6"
+            >
+              <h2 className="text-lg font-semibold mb-3 text-gray-700">
+                Daftar Guard Baru
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                <input
+                  type="text"
+                  placeholder="Nama Guard"
+                  className="border rounded-lg p-2"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Shift"
+                  className="border rounded-lg p-2"
+                  value={shift}
+                  onChange={(e) => setShift(e.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Syarikat"
+                  className="border rounded-lg p-2"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700"
+              >
+                {loading ? "Menyimpan..." : "Daftar"}
+              </button>
+            </form>
+
             <div className="shadow-lg rounded-xl bg-white p-4">
-              <h2 className="text-lg font-semibold mb-3">Daftar Guard Baru</h2>
-              <form className="space-y-3">
-                <input type="text" placeholder="Nama Guard" className="w-full border rounded px-3 py-2" />
-                <input type="text" placeholder="Shift" className="w-full border rounded px-3 py-2" />
-                <input type="text" placeholder="Syarikat" className="w-full border rounded px-3 py-2" />
-                <button className="bg-gradient-to-r from-purple-600 to-indigo-500 text-white rounded-xl px-4 py-2 hover:scale-105 transition-all duration-300">
-                  Daftar
-                </button>
-              </form>
-            </div>
-            <div className="shadow-lg rounded-xl bg-white p-4">
-              <h2 className="text-lg font-semibold mb-3">Senarai Guard Aktif</h2>
-              <table className="w-full border">
-                <thead>
-                  <tr className="bg-gray-100">
+              <h2 className="text-lg font-semibold mb-3 text-gray-700">
+                Senarai Guard
+              </h2>
+              <table className="w-full border text-sm">
+                <thead className="bg-gray-100 text-gray-700">
+                  <tr>
                     <th className="p-2 border">Nama</th>
                     <th className="p-2 border">Shift</th>
                     <th className="p-2 border">Syarikat</th>
-                    <th className="p-2 border">Action</th>
+                    <th className="p-2 border">Status</th>
+                    <th className="p-2 border text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dummyGuards.map((g) => (
-                    <tr key={g.id} className="text-center">
-                      <td className="p-2 border">{g.name}</td>
-                      <td className="p-2 border">{g.shift}</td>
-                      <td className="p-2 border">{g.company}</td>
-                      <td className="p-2 border">
-                        <button className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600">Delete</button>
+                  {guards.map((g) => (
+                    <tr key={g.id} className="text-center border-b">
+                      <td className="p-2">{g.full_name}</td>
+                      <td className="p-2">{g.shift}</td>
+                      <td className="p-2">{g.company}</td>
+                      <td className="p-2">
+                        <span
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                            g.is_active
+                              ? "bg-green-100 text-green-700"
+                              : "bg-gray-100 text-gray-500"
+                          }`}
+                        >
+                          {g.is_active ? "On Duty" : "Off Duty"}
+                        </span>
+                      </td>
+                      <td className="p-2">
+                        <button
+                          onClick={() => handleDeleteGuard(g.id)}
+                          className="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))}
+                  {guards.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className="p-4 text-center text-gray-500">
+                        Tiada guard berdaftar.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         )}
       </div>
-
-      {/* Popup Setting */}
-      {showSetting && (
-        <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-semibold mb-4">Tetapan Jana Pelan</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium">Bilangan Sesi / Hari</label>
-                <input
-                  type="number"
-                  value={sessionsPerDay}
-                  onChange={(e) => setSessionsPerDay(Math.max(1, parseInt(e.target.value || "1", 10)))}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Rumah per Sesi</label>
-                <input
-                  type="number"
-                  value={housesPerSession}
-                  onChange={(e) => setHousesPerSession(Math.max(1, parseInt(e.target.value || "1", 10)))}
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Nota</label>
-                <input
-                  type="text"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Contoh: elak rumah yang ada anjing ganas"
-                  className="w-full border rounded px-3 py-2"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-4">
-              <button onClick={() => setShowSetting(false)} className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">
-                Batal
-              </button>
-              <button
-                onClick={() => {
-                  setSessions(buildSessions(sessionsPerDay, housesPerSession));
-                  setActiveSession(0);
-                  setShowSetting(false);
-                }}
-                className="bg-gradient-to-r from-purple-600 to-indigo-500 text-white rounded-xl px-4 py-2 hover:scale-105 transition-all duration-300"
-              >
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
