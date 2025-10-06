@@ -7,6 +7,7 @@ import Patrol from "./Patrol.jsx";
 import Report from "./Report.jsx";
 import History from "./History.jsx";
 import MapView from "./MapView.jsx";
+import MapViewRealtime from "./MapViewRealtime.jsx";
 
 export default function LightRouter() {
   return (
@@ -19,6 +20,7 @@ export default function LightRouter() {
         <Route path="report" element={<Report />} />
         <Route path="history" element={<History />} />
         <Route path="map" element={<MapView />} />
+        <Route path="map-realtime" element={<MapViewRealtime />} />
       </Route>
       <Route path="*" element={<Navigate to="login" replace />} />
     </Routes>
