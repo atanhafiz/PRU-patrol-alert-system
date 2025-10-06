@@ -5,7 +5,7 @@ import { useToast } from "../../components/ToastProvider";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-// 🧭 Default marker
+// 🧭 Default marker icon
 const markerIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -13,7 +13,7 @@ const markerIcon = new L.Icon({
   iconAnchor: [12, 41],
 });
 
-// 🎨 Warna ikut kelajuan
+// 🎨 Kelajuan → warna
 const getColorBySpeed = (speed) => {
   if (speed <= 10) return "green";
   if (speed <= 40) return "orange";
@@ -23,10 +23,11 @@ const getColorBySpeed = (speed) => {
 export default function MapViewRealtime() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedGuard, setSelectedGuard] = useState("ALL");
   const mapRef = useRef();
   const { showToast } = useToast();
 
-  // 📡 Fetch data dari Supabase
+  // Fetch dari Supabase
   const fetchReports = async () => {
     try {
       const { data, error } = await supabase
@@ -34,7 +35,7 @@ export default function MapViewRealtime() {
         .select("*")
         .not("latitude", "is", null)
         .not("longitude", "is", null)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true });
 
       if (error) throw error;
       setReports(data || []);
@@ -48,38 +49,59 @@ export default function MapViewRealtime() {
 
   useEffect(() => {
     fetchReports();
-
-    // ♻️ Auto refresh setiap 30s
-    const interval = setInterval(fetchReports, 30000);
+    const interval = setInterval(fetchReports, 20000); // auto refresh setiap 20s
     return () => clearInterval(interval);
   }, []);
 
-  if (loading)
-    return <p className="p-4 text-gray-500 animate-pulse">Loading map data...</p>;
+  // Dapat semua nama guard
+  const guardNames = Array.from(new Set(reports.map((r) => r.guard_name)));
 
-  if (reports.length === 0)
-    return <p className="p-4 text-gray-500">Tiada laporan dengan lokasi.</p>;
+  // Filter ikut guard
+  const filteredReports =
+    selectedGuard === "ALL"
+      ? reports
+      : reports.filter((r) => r.guard_name === selectedGuard);
 
-  // 🎯 Center map di lokasi terbaru
-  const center = [
-    reports[0].latitude || 3.139,
-    reports[0].longitude || 101.6869,
-  ];
-
-  // 🔄 Group ikut guard_name
-  const guards = reports.reduce((acc, r) => {
+  // Group ikut guard
+  const guards = filteredReports.reduce((acc, r) => {
     if (!acc[r.guard_name]) acc[r.guard_name] = [];
     acc[r.guard_name].push(r);
     return acc;
   }, {});
 
+  // Center peta
+  const latest = reports[reports.length - 1];
+  const center = latest
+    ? [latest.latitude, latest.longitude]
+    : [3.139, 101.6869];
+
+  if (loading)
+    return <p className="p-4 text-gray-500 animate-pulse">Loading map data...</p>;
+
   return (
-    <div className="animate-fadeIn h-[80vh] rounded-2xl overflow-hidden shadow">
+    <div className="animate-fadeIn relative h-[80vh] rounded-2xl overflow-hidden shadow">
+      {/* 🧭 Filter guard */}
+      <div className="absolute z-[1000] top-3 left-3 bg-white/90 rounded-xl p-2 shadow flex items-center gap-2">
+        <label className="text-sm font-medium text-gray-600">Guard:</label>
+        <select
+          value={selectedGuard}
+          onChange={(e) => setSelectedGuard(e.target.value)}
+          className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+        >
+          <option value="ALL">All</option>
+          {guardNames.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <MapContainer
         center={center}
-        zoom={16}
+        zoom={15}
         scrollWheelZoom={true}
-        className="h-full w-full z-0"
+        className="h-full w-full"
         ref={mapRef}
       >
         <TileLayer
@@ -87,35 +109,26 @@ export default function MapViewRealtime() {
           attribution="© OpenStreetMap contributors"
         />
 
-        {/* Marker & polyline untuk setiap guard */}
+        {/* Marker & line ikut guard */}
         {Object.entries(guards).map(([name, entries]) => {
-          // Urut ikut masa
           const sorted = [...entries].sort(
             (a, b) => new Date(a.created_at) - new Date(b.created_at)
           );
 
-          // Ambil koordinat (garisan laluan)
           const path = sorted.map((r) => [r.latitude, r.longitude]);
-
-          // Ambil warna ikut kelajuan terakhir
           const latest = sorted[sorted.length - 1];
           const color = getColorBySpeed(latest.max_speed || 0);
 
           return (
             <div key={name}>
-              {/* Garisan laluan */}
               <Polyline positions={path} color={color} weight={5} opacity={0.7} />
-
-              {/* Marker guard */}
               <Marker
                 position={[latest.latitude, latest.longitude]}
                 icon={markerIcon}
               >
                 <Popup>
                   <div className="text-sm">
-                    <p className="font-bold text-blue-700 mb-1">
-                      {latest.guard_name}
-                    </p>
+                    <p className="font-bold text-blue-700 mb-1">{name}</p>
                     <p className="text-gray-700 mb-1">{latest.plate_no}</p>
                     <p className="text-xs text-gray-500">
                       {new Date(latest.created_at).toLocaleString()}
@@ -141,6 +154,7 @@ export default function MapViewRealtime() {
         })}
       </MapContainer>
 
+      {/* Legend */}
       <div className="absolute bottom-3 left-3 bg-white/90 rounded-xl p-2 text-xs shadow">
         <div className="flex items-center gap-2 mb-1">
           <span className="w-3 h-3 bg-green-500 rounded-full" /> ≤10 km/h
