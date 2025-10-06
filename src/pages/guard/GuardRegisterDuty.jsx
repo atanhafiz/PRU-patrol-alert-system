@@ -13,25 +13,20 @@ export default function GuardRegisterDuty() {
   const [loading, setLoading] = useState(false);
   const [activeGuard, setActiveGuard] = useState(null);
 
-  // Ambil senarai guard
+  // 🚀 Fetch senarai guard
   const fetchGuards = async () => {
     const { data, error } = await supabase
       .from("guards")
       .select("id, full_name, shift, company, is_active, status")
       .order("full_name", { ascending: true });
-
     if (error) {
       console.error(error);
       showToast("Gagal ambil senarai guard", "error");
-    } else {
-      setGuards(data || []);
-    }
+    } else setGuards(data || []);
   };
 
-  // Auto fetch & realtime
   useEffect(() => {
     fetchGuards();
-
     const saved = localStorage.getItem("active_guard_id");
     if (saved) setActiveGuard(saved);
 
@@ -43,44 +38,22 @@ export default function GuardRegisterDuty() {
         fetchGuards
       )
       .subscribe();
-
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // Dapatkan lokasi
-  const getLocation = () =>
-    new Promise((resolve) => {
-      if (!navigator.geolocation)
-        return resolve({ lat: null, lon: null });
-      navigator.geolocation.getCurrentPosition(
-        (pos) =>
-          resolve({
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude,
-          }),
-        () => resolve({ lat: null, lon: null }),
-        { enableHighAccuracy: true, timeout: 8000 }
-      );
-    });
-
-  // Start duty (masuk shift)
+  // 🟢 Start Duty (masuk shift sahaja)
   const handleStart = async () => {
-    if (!selectedGuard) {
-      showToast("Sila pilih nama guard", "error");
+    if (!selectedGuard || !plateNo) {
+      showToast("Sila lengkapkan semua maklumat", "error");
       return;
     }
-    if (!plateNo) {
-      showToast("Sila isi nombor plat motosikal", "error");
-      return;
-    }
-
     setLoading(true);
     try {
       const { error } = await supabase
         .from("guards")
         .update({
-          is_active: false,
           status: "on_duty",
+          is_active: false,
           updated_at: new Date().toISOString(),
         })
         .eq("id", selectedGuard);
@@ -90,8 +63,8 @@ export default function GuardRegisterDuty() {
       setActiveGuard(selectedGuard);
       localStorage.setItem("active_guard_id", selectedGuard);
 
-      showToast("✅ Duty bermula (menunggu Selfie-Start)", "success");
-      alert("✅ Guard telah mula shift.\nSila tekan Selfie-Start bila ronda bermula.");
+      showToast("✅ Duty bermula (On Duty – belum ronda)", "success");
+      alert("✅ Anda kini On Duty.\nSila tekan Selfie-Start bila rondaan bermula.");
     } catch (err) {
       console.error(err);
       showToast("Gagal mula duty: " + err.message, "error");
@@ -99,13 +72,12 @@ export default function GuardRegisterDuty() {
     setLoading(false);
   };
 
-  // Stop duty (selesai shift)
+  // 🔴 Stop Duty (tamat shift)
   const handleStop = async () => {
     if (!activeGuard) {
       showToast("Tiada guard aktif", "error");
       return;
     }
-
     setLoading(true);
     try {
       const { error } = await supabase
@@ -120,8 +92,7 @@ export default function GuardRegisterDuty() {
       if (error) throw error;
 
       showToast("🚨 Duty ditamatkan", "success");
-      alert("🚨 Duty tamat, terima kasih!");
-
+      alert("🚨 Duty tamat. Terima kasih!");
       setActiveGuard(null);
       setSelectedGuard("");
       setPlateNo("");
@@ -137,7 +108,7 @@ export default function GuardRegisterDuty() {
     <div className="min-h-screen bg-white p-6">
       <LoaderOverlay show={loading} />
 
-      {/* Butang balik */}
+      {/* 🔙 Butang balik */}
       <button
         onClick={() => navigate("/guard/dashboard")}
         className="mb-4 px-4 py-2 rounded-full bg-gray-200 hover:bg-gray-300 shadow text-sm font-medium"
@@ -149,7 +120,7 @@ export default function GuardRegisterDuty() {
         Register Duty
       </h1>
 
-      {/* Form daftar */}
+      {/* 🧾 Form daftar */}
       <div className="max-w-md mx-auto bg-white border rounded-xl shadow-lg p-6">
         <label className="block text-sm font-medium mb-1">Nama Guard</label>
         <select
@@ -195,7 +166,7 @@ export default function GuardRegisterDuty() {
         </div>
       </div>
 
-      {/* Senarai guard */}
+      {/* 📋 Senarai Guard */}
       <div className="max-w-2xl mx-auto mt-8 bg-white border rounded-xl shadow p-4">
         <h2 className="text-lg font-semibold mb-3 text-gray-700 text-center">
           Senarai Guard

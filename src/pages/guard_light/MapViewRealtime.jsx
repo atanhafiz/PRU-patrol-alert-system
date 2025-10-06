@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { motion } from "framer-motion";
 
-// Marker asas
+// marker asas
 const baseIcon = (color = "green") =>
   new L.Icon({
     iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`,
@@ -16,7 +16,7 @@ const baseIcon = (color = "green") =>
     iconAnchor: [12, 41],
   });
 
-// Warna ikut shift
+// warna ikut shift
 const getColor = (shift) => {
   if (!shift) return "gray";
   const s = shift.toLowerCase();
@@ -25,7 +25,7 @@ const getColor = (shift) => {
   return "green";
 };
 
-// Radar animasi
+// radar animasi
 function RadarPulse({ color = "green" }) {
   return (
     <motion.div
@@ -50,7 +50,7 @@ function RadarPulse({ color = "green" }) {
   );
 }
 
-// Marker guard
+// marker guard
 function GuardMarker({ guard, popupContent, isNew, onFocus }) {
   const [blink, setBlink] = useState(isNew);
   const color = getColor(guard.shift);
@@ -98,7 +98,7 @@ function GuardMarker({ guard, popupContent, isNew, onFocus }) {
   );
 }
 
-// Auto zoom
+// auto zoom
 function useFlyTo(coord) {
   const map = useMap();
   useEffect(() => {
@@ -119,12 +119,16 @@ export default function MapViewRealtime() {
   const { showToast } = useToast();
   const mapRef = useRef();
 
+  // ambil semua guard aktif (on_patrol)
   const fetchGuards = async () => {
     const { data, error } = await supabase
       .from("guards")
       .select("*")
-      .eq("is_active", true)
+      .or("is_active.eq.true,status.eq.on_patrol")
+      .not("last_lat", "is", null)
+      .not("last_lon", "is", null)
       .order("full_name", { ascending: true });
+
     if (error) {
       console.error(error);
       showToast("Gagal ambil data guard", "error");
@@ -144,6 +148,7 @@ export default function MapViewRealtime() {
 
   useEffect(() => {
     fetchGuards();
+
     const channel = supabase
       .channel("guards-command-hq")
       .on(
@@ -152,7 +157,8 @@ export default function MapViewRealtime() {
         (payload) => {
           if (
             payload.eventType === "UPDATE" &&
-            payload.new.is_active === true
+            (payload.new.is_active === true ||
+              payload.new.status === "on_patrol")
           ) {
             setNewGuardId(payload.new.id);
             setFocusCoord([payload.new.last_lat, payload.new.last_lon]);
@@ -164,7 +170,7 @@ export default function MapViewRealtime() {
                 );
               else return [...prev, payload.new];
             });
-            showToast(`🚨 ${payload.new.full_name} mula duty!`, "success");
+            showToast(`🚨 ${payload.new.full_name} mula rondaan!`, "success");
           }
           if (
             payload.eventType === "UPDATE" &&
@@ -189,6 +195,7 @@ export default function MapViewRealtime() {
         }
       )
       .subscribe();
+
     return () => supabase.removeChannel(channel);
   }, []);
 
@@ -203,11 +210,15 @@ export default function MapViewRealtime() {
   };
 
   if (!guards.length)
-    return <p className="p-4 text-gray-500 animate-pulse">Tiada guard aktif...</p>;
+    return (
+      <p className="p-4 text-gray-500 animate-pulse">
+        Tiada guard aktif (belum selfie-start)...
+      </p>
+    );
 
   return (
     <div className="flex gap-4 h-[80vh]">
-      {/* Senarai guard */}
+      {/* senarai guard */}
       <div className="w-1/4 bg-white rounded-2xl shadow overflow-y-auto p-4 border">
         <h2 className="text-lg font-bold text-indigo-600 mb-3">👮 Guard Aktif</h2>
         {guards.map((g) => (
@@ -229,14 +240,14 @@ export default function MapViewRealtime() {
                   g.is_active ? "text-green-600" : "text-gray-400"
                 }`}
               >
-                {g.is_active ? "On Duty" : "Off Duty"}
+                {g.is_active ? "On Patrol" : g.status || "Off Duty"}
               </span>
             </p>
           </div>
         ))}
       </div>
 
-      {/* Peta */}
+      {/* peta utama */}
       <div className="flex-1 relative rounded-2xl overflow-hidden shadow border">
         <MapContainer
           center={center}
@@ -292,7 +303,7 @@ export default function MapViewRealtime() {
         </MapContainer>
       </div>
 
-      {/* Command panel kanan */}
+      {/* Command Panel kanan */}
       <div className="w-1/4 bg-white rounded-2xl shadow overflow-y-auto p-4 border">
         <h2 className="text-lg font-bold text-indigo-600 mb-3">🧭 Command Panel</h2>
         {focusGuard ? (
@@ -310,7 +321,7 @@ export default function MapViewRealtime() {
                   focusGuard.is_active ? "text-green-600" : "text-gray-400"
                 }`}
               >
-                {focusGuard.is_active ? "On Duty" : "Off Duty"}
+                {focusGuard.is_active ? "On Patrol" : focusGuard.status || "Off Duty"}
               </span>
             </p>
             <p className="text-sm mb-1">
@@ -342,7 +353,9 @@ export default function MapViewRealtime() {
 
             <div className="flex gap-2">
               <button
-                onClick={() => setFocusCoord([focusGuard.last_lat, focusGuard.last_lon])}
+                onClick={() =>
+                  setFocusCoord([focusGuard.last_lat, focusGuard.last_lon])
+                }
                 className="flex-1 bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm hover:bg-indigo-700"
               >
                 🎯 Fokus Map
