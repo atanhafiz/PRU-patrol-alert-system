@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { useToast } from "../../components/ToastProvider";
 import LoaderOverlay from "../../components/LoaderOverlay";
 
 export default function GuardRegisterDuty() {
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [guards, setGuards] = useState([]);
   const [selectedGuard, setSelectedGuard] = useState("");
   const [plateNo, setPlateNo] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeGuard, setActiveGuard] = useState(null);
 
-  // 🛰️ Fetch senarai guard dari Supabase
+  // 🛰️ Ambil senarai guard dari Supabase
   const fetchGuards = async () => {
     const { data, error } = await supabase
       .from("guards")
@@ -26,10 +28,13 @@ export default function GuardRegisterDuty() {
     }
   };
 
+  // ✅ Realtime + auto fetch
   useEffect(() => {
     fetchGuards();
 
-    // Realtime listener
+    const saved = localStorage.getItem("active_guard_id");
+    if (saved) setActiveGuard(saved);
+
     const channel = supabase
       .channel("guards-realtime")
       .on(
@@ -45,6 +50,23 @@ export default function GuardRegisterDuty() {
     return () => supabase.removeChannel(channel);
   }, []);
 
+  // 🧭 Ambil lokasi GPS
+  const getLocation = () =>
+    new Promise((resolve) => {
+      if (!navigator.geolocation)
+        return resolve({ lat: null, lon: null });
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) =>
+          resolve({
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+          }),
+        () => resolve({ lat: null, lon: null }),
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    });
+
   // 🟢 Start duty
   const handleStart = async () => {
     if (!selectedGuard) {
@@ -58,15 +80,25 @@ export default function GuardRegisterDuty() {
 
     setLoading(true);
     try {
+      const { lat, lon } = await getLocation();
+
       const { error } = await supabase
         .from("guards")
-        .update({ is_active: true })
+        .update({
+          is_active: true,
+          last_lat: lat,
+          last_lon: lon,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", selectedGuard);
 
       if (error) throw error;
 
       setActiveGuard(selectedGuard);
+      localStorage.setItem("active_guard_id", selectedGuard);
+
       showToast("✅ Duty dimulakan", "success");
+      alert(`✅ Duty dimulakan!\nPlat: ${plateNo}\nLat: ${lat}\nLon: ${lon}`);
     } catch (err) {
       console.error(err);
       showToast("Gagal mula duty: " + err.message, "error");
@@ -85,15 +117,21 @@ export default function GuardRegisterDuty() {
     try {
       const { error } = await supabase
         .from("guards")
-        .update({ is_active: false })
+        .update({
+          is_active: false,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", activeGuard);
 
       if (error) throw error;
 
       showToast("🚨 Duty ditamatkan", "success");
+      alert("🚨 Duty ditamatkan!");
+
       setActiveGuard(null);
       setSelectedGuard("");
       setPlateNo("");
+      localStorage.removeItem("active_guard_id");
     } catch (err) {
       console.error(err);
       showToast("Gagal tamat duty: " + err.message, "error");
@@ -104,6 +142,15 @@ export default function GuardRegisterDuty() {
   return (
     <div className="min-h-screen bg-white p-6">
       <LoaderOverlay show={loading} />
+
+      {/* 🔙 Back Button */}
+      <button
+        onClick={() => navigate("/guard/dashboard")}
+        className="mb-4 px-4 py-2 rounded-full bg-gray-200 hover:bg-gray-300 shadow text-sm font-medium"
+      >
+        ← Kembali ke Dashboard
+      </button>
+
       <h1 className="text-2xl font-bold text-indigo-700 mb-4 text-center">
         Register Duty
       </h1>
