@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { supabase } from "../lib/supabaseClient"; // ✅ tambah import supabase
 
+// ================== UTIL ==================
 function haversine(lat1, lon1, lat2, lon2) {
   const toRad = (x) => (x * Math.PI) / 180;
   const R = 6371e3;
@@ -25,9 +27,11 @@ function formatDuration(ms) {
   return `${h}:${m}:${s}`;
 }
 
-export default function MapView({ isActive, onStop }) {
+// ================== COMPONENT ==================
+export default function MapView({ isActive, onStop, guardName }) {
   const mapRef = useRef(null);
   const watchIdRef = useRef(null);
+  const updateTimerRef = useRef(null);
 
   const [route, setRoute] = useState([]);
   const [speeds, setSpeeds] = useState([]);
@@ -42,6 +46,7 @@ export default function MapView({ isActive, onStop }) {
         attribution: "© OpenStreetMap contributors",
       }).addTo(mapRef.current);
 
+      // legend
       const legend = L.control({ position: "bottomright" });
       legend.onAdd = function () {
         const div = L.DomUtil.create("div", "legend");
@@ -64,23 +69,17 @@ export default function MapView({ isActive, onStop }) {
       setDistance(0);
       setStartTimestamp(Date.now());
 
+      // track position
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
           const { latitude, longitude, speed } = pos.coords;
           const kmh = speed ? speed * 3.6 : 0;
           const newPoint = [latitude, longitude];
 
-          // global backup
-          window.lastKnownPosition = {
-            lat: latitude,
-            lng: longitude,
-            ts: Date.now(),
-          };
-
+          window.lastKnownPosition = { lat: latitude, lng: longitude, ts: Date.now() };
           setRoute((prev) => [...prev, { lat: latitude, lng: longitude, speed: kmh }]);
           setSpeeds((prev) => [...prev, kmh]);
 
-          // warna ikut kelajuan
           let color = "green";
           if (kmh > 40) color = "red";
           else if (kmh > 10) color = "orange";
@@ -109,48 +108,71 @@ export default function MapView({ isActive, onStop }) {
         },
         { enableHighAccuracy: true, maximumAge: 1000, timeout: 8000 }
       );
-    } else {
-      // ====== STOP TRACKING ======
+
+      // ====== AUTO UPDATE KE SUPABASE (setiap 15s) ======
+      updateTimerRef.current = setInterval(async () => {
+        const last = window.lastKnownPosition;
+        if (!last || !guardName) return;
+        try {
+          const { error } = await supabase
+            .from("guards")
+            .update({
+              last_lat: last.lat,
+              last_lon: last.lng,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("full_name", guardName);
+          if (error) console.warn("⚠️ Supabase update error:", error.message);
+          else console.log("📡 Koordinat dikemas kini ke HQ:", last);
+        } catch (e) {
+          console.warn("❌ Gagal hantar update ke Supabase:", e.message);
+        }
+      }, 15000);
+    } 
+    // ====== STOP TRACKING ======
+    else {
       if (watchIdRef.current) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
-
-        const avg =
-          speeds.length > 0
-            ? (speeds.reduce((a, b) => a + b, 0) / speeds.length).toFixed(1)
-            : 0;
-        const max = speeds.length > 0 ? Math.max(...speeds).toFixed(1) : 0;
-        const duration = startTimestamp
-          ? formatDuration(Date.now() - startTimestamp)
-          : "00:00:00";
-        const dist = (distance / 1000).toFixed(2);
-
-        // fallback GPS dari window.lastKnownPosition
-        const last = window.lastKnownPosition || {
-          lat: 6.3205,
-          lng: 100.2901,
-        };
-
-        // fallback summary kalau GPS gagal
-        const summary = {
-          avg: avg || 0,
-          max: max || 0,
-          duration,
-          distance: dist || "0.00",
-          route: route.length ? route : [last],
-          latitude: last.lat,
-          longitude: last.lng,
-        };
-
-        console.log("📦 GPS Summary sent to onStop:", summary);
-        onStop?.(summary);
       }
+      if (updateTimerRef.current) {
+        clearInterval(updateTimerRef.current);
+        updateTimerRef.current = null;
+      }
+
+      // ringkasan
+      const avg =
+        speeds.length > 0
+          ? (speeds.reduce((a, b) => a + b, 0) / speeds.length).toFixed(1)
+          : 0;
+      const max = speeds.length > 0 ? Math.max(...speeds).toFixed(1) : 0;
+      const duration = startTimestamp
+        ? formatDuration(Date.now() - startTimestamp)
+        : "00:00:00";
+      const dist = (distance / 1000).toFixed(2);
+
+      const last = window.lastKnownPosition || { lat: 6.3205, lng: 100.2901 };
+
+      const summary = {
+        avg: avg || 0,
+        max: max || 0,
+        duration,
+        distance: dist || "0.00",
+        route: route.length ? route : [last],
+        latitude: last.lat,
+        longitude: last.lng,
+      };
+
+      console.log("📦 GPS Summary sent to onStop:", summary);
+      onStop?.(summary);
     }
 
     // cleanup
     return () => {
       if (watchIdRef.current)
         navigator.geolocation.clearWatch(watchIdRef.current);
+      if (updateTimerRef.current)
+        clearInterval(updateTimerRef.current);
     };
   }, [isActive]);
 
