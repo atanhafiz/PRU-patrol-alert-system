@@ -1,7 +1,7 @@
 {
-  "name": "pru-patrol",
-  "private": true,
+  "name": "pru-patrol-system",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
+    "framer-motion": "^12.23.22",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.452.0",
     "react": "^18.3.1",
@@ -22,7 +23,11 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
-    "tailwindcss": "3.4.13",
+    "tailwindcss": "^3.4.13",
     "vite": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   }
 }
