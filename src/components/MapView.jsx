@@ -35,6 +35,7 @@ export default function MapView({ isActive, onStop }) {
   const [startTimestamp, setStartTimestamp] = useState(null);
 
   useEffect(() => {
+    // ====== INIT MAP ======
     if (!mapRef.current) {
       mapRef.current = L.map("mapid").setView([3.139, 101.6869], 16);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -55,6 +56,7 @@ export default function MapView({ isActive, onStop }) {
       legend.addTo(mapRef.current);
     }
 
+    // ====== START TRACKING ======
     if (isActive) {
       let lastPoint = null;
       setRoute([]);
@@ -64,21 +66,21 @@ export default function MapView({ isActive, onStop }) {
 
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
-          const { latitude, longitude, speed, accuracy } = pos.coords;
+          const { latitude, longitude, speed } = pos.coords;
           const kmh = speed ? speed * 3.6 : 0;
           const newPoint = [latitude, longitude];
 
-          // simpan global lastKnownPosition untuk fallback
+          // global backup
           window.lastKnownPosition = {
             lat: latitude,
             lng: longitude,
-            accuracy: accuracy ?? null,
             ts: Date.now(),
           };
 
           setRoute((prev) => [...prev, { lat: latitude, lng: longitude, speed: kmh }]);
           setSpeeds((prev) => [...prev, kmh]);
 
+          // warna ikut kelajuan
           let color = "green";
           if (kmh > 40) color = "red";
           else if (kmh > 10) color = "orange";
@@ -102,10 +104,13 @@ export default function MapView({ isActive, onStop }) {
           lastPoint = newPoint;
           mapRef.current.setView(newPoint, 18);
         },
-        (err) => console.error("GPS error:", err),
-        { enableHighAccuracy: true, maximumAge: 1000 }
+        (err) => {
+          console.warn("❌ GPS error (tracking):", err);
+        },
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 8000 }
       );
     } else {
+      // ====== STOP TRACKING ======
       if (watchIdRef.current) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
@@ -118,17 +123,31 @@ export default function MapView({ isActive, onStop }) {
         const duration = startTimestamp
           ? formatDuration(Date.now() - startTimestamp)
           : "00:00:00";
+        const dist = (distance / 1000).toFixed(2);
 
-        onStop?.({
-          avg,
-          max,
+        // fallback GPS dari window.lastKnownPosition
+        const last = window.lastKnownPosition || {
+          lat: 6.3205,
+          lng: 100.2901,
+        };
+
+        // fallback summary kalau GPS gagal
+        const summary = {
+          avg: avg || 0,
+          max: max || 0,
           duration,
-          distance: (distance / 1000).toFixed(2),
-          route,
-        });
+          distance: dist || "0.00",
+          route: route.length ? route : [last],
+          latitude: last.lat,
+          longitude: last.lng,
+        };
+
+        console.log("📦 GPS Summary sent to onStop:", summary);
+        onStop?.(summary);
       }
     }
 
+    // cleanup
     return () => {
       if (watchIdRef.current)
         navigator.geolocation.clearWatch(watchIdRef.current);

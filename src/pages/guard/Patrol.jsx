@@ -1,4 +1,3 @@
-// src/pages/guard/Patrol.jsx
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import HouseSnapUploader from "../../components/HouseSnapUploader";
@@ -24,7 +23,7 @@ export default function Patrol() {
   const guardName = state?.guardName || "Unknown Guard";
   const plateNo = state?.plateNo || "-";
 
-  // ========================== UTIL ==========================
+  // skip rumah
   const skip = (id) =>
     setItems((prev) =>
       prev.map((x) => (x.id === id ? { ...x, status: "skipped" } : x))
@@ -43,9 +42,10 @@ export default function Patrol() {
       setOpenStart(true);
       setTracking(false);
 
-      // ambil lokasi GPS guard masa mula patrol
       let latitude = null;
       let longitude = null;
+
+      // Ambil GPS dengan fallback
       if (navigator.geolocation) {
         await new Promise((resolve) => {
           navigator.geolocation.getCurrentPosition(
@@ -55,7 +55,10 @@ export default function Patrol() {
               resolve();
             },
             (err) => {
-              console.warn("GPS error (selfie-start):", err);
+              console.warn("⚠️ GPS error (selfie-start):", err);
+              // fallback HQ Kedah
+              latitude = 6.3205;
+              longitude = 100.2901;
               resolve();
             },
             { enableHighAccuracy: true, timeout: 8000 }
@@ -63,7 +66,7 @@ export default function Patrol() {
         });
       }
 
-      // update table guards supaya HQ detect aktif
+      // update guard jadi aktif + status rondaan
       const { error } = await supabase
         .from("guards")
         .update({
@@ -78,11 +81,9 @@ export default function Patrol() {
       if (error) throw error;
 
       alert(
-        `📸 Selfie-Start berjaya!\nGuard kini On Patrol.\nKoordinat:\nLat: ${latitude}\nLon: ${longitude}`
+        `📸 Selfie-Start berjaya!\nGuard kini On Patrol.\nLat: ${latitude}\nLon: ${longitude}`
       );
-      console.log("✅ Guard aktif di HQ:", guardName);
 
-      // reset map
       setTimeout(() => {
         setMapKey(Date.now());
         setTracking(true);
@@ -95,17 +96,18 @@ export default function Patrol() {
 
   // ========================== STOP PATROL ==========================
   const handleStop = async (summary) => {
-    if (!summary) {
-      alert("⚠️ Tiada data ringkasan diterima daripada GPS.");
-      return;
-    }
-
-    console.log("📊 Ringkasan Rondaan:", summary);
     try {
-      const { avg, max, distance, duration } = summary;
+      // fallback kalau summary kosong
+      const defaultSummary = {
+        avg: 0,
+        max: 0,
+        distance: 0,
+        duration: "00:00:00",
+      };
+      const { avg, max, distance, duration } = summary || defaultSummary;
+
       let latitude = null;
       let longitude = null;
-
       if (navigator.geolocation) {
         await new Promise((resolve) => {
           navigator.geolocation.getCurrentPosition(
@@ -115,7 +117,9 @@ export default function Patrol() {
               resolve();
             },
             (err) => {
-              console.warn("GPS error:", err);
+              console.warn("GPS error (stop patrol):", err);
+              latitude = 6.3205;
+              longitude = 100.2901;
               resolve();
             },
             { enableHighAccuracy: true, timeout: 8000 }
@@ -123,7 +127,7 @@ export default function Patrol() {
         });
       }
 
-      // Simpan ke table patrol_summary
+      // Simpan data rondaan ke Supabase
       const { error: insertErr } = await supabase.from("patrol_summary").insert([
         {
           guard_name: guardName,
@@ -142,15 +146,19 @@ export default function Patrol() {
       ]);
       if (insertErr) throw insertErr;
 
-      // set guard off_duty lepas hantar report
-      await supabase
+      // Tamatkan duty guard
+      const { error: updateErr } = await supabase
         .from("guards")
         .update({
           is_active: false,
           status: "off_duty",
+          last_lat: latitude,
+          last_lon: longitude,
           updated_at: new Date().toISOString(),
         })
         .eq("full_name", guardName);
+
+      if (updateErr) throw updateErr;
 
       alert("✅ Rondaan disimpan & guard tamat duty!");
     } catch (err) {
