@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient";
+import { supabase } from "./supabaseAutoClient";
 
 /**
  * Upload selfie → Storage (private) + insert DB → noti Telegram

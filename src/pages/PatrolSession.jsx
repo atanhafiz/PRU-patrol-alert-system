@@ -2,7 +2,7 @@ import { useState } from "react";
 import MapView from "../components/MapView";
 import { useToastHelpers } from "../utils/toastHelpers";
 import SelfieUploader from "../components/SelfieUploader";
-import supabase from "../services/supabaseClient";
+import supabase from "../lib/supabaseAutoClient";
 
 export default function PatrolSession({
   guardName = "Unknown Guard",

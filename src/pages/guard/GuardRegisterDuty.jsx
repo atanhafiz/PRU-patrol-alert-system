@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseAutoClient";
 import { useToast } from "../../components/ToastProvider";
 import LoaderOverlay from "../../components/LoaderOverlay";
 

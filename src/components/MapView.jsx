@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { supabase } from "../lib/supabaseClient"; // ✅ tambah import supabase
+import { supabase } from "../lib/supabaseAutoClient"; // ✅ tambah import supabase
 
 // ================== UTIL ==================
 function haversine(lat1, lon1, lat2, lon2) {

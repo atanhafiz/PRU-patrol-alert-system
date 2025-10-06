@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseAutoClient";
 import { useToast } from "../../components/ToastProvider";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";

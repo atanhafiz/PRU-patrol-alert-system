@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient'
+import { supabase } from '../lib/supabaseAutoClient'
 
 export function opDateISO(){
   const d=new Date(); const C=6;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseAutoClient";
 import { useToast } from "../../components/ToastProvider";
 import LoaderOverlay from "../../components/LoaderOverlay";
 

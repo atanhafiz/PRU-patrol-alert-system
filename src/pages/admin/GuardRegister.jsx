@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseAutoClient";
 import { useToast } from "../../components/ToastProvider";
 
 export default function GuardRegister() {

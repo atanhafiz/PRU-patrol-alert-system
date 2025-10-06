@@ -4,7 +4,7 @@ import HouseSnapUploader from "../../components/HouseSnapUploader";
 import SelfieUploader from "../../components/SelfieUploader";
 import EmergencyButton from "../../components/EmergencyButton";
 import MapView from "../../components/MapView";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseAutoClient";
 
 const initialHouses = Array.from({ length: 7 }).map((_, i) => ({
   id: i + 1,

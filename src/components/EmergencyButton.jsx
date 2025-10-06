@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Siren } from "lucide-react";
-import supabase from "../services/supabaseClient";
+import supabase from "../lib/supabaseAutoClient";
 
 /**
  * Props:
